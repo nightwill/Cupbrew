@@ -106,10 +106,14 @@ struct Brew: Sendable {
 
     /// An app opened from Finder inherits launchd's bare `PATH`, where the
     /// tools Homebrew calls out to are missing, so its own `bin` goes first.
+    /// Its `sbin` goes along: `brew doctor` warns when that is missing from
+    /// `PATH`, which in a terminal set up for Homebrew it never is.
     private static func environment(for executable: URL) -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
-        let bin = executable.deletingLastPathComponent().path
-        environment["PATH"] = [bin, environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"].joined(separator: ":")
+        let bin = executable.deletingLastPathComponent()
+        let sbin = bin.deletingLastPathComponent().appending(path: "sbin")
+        environment["PATH"] = [bin.path, sbin.path, environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"]
+            .joined(separator: ":")
         return environment
     }
 
