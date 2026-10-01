@@ -1,0 +1,113 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.04314,0.49804,0.52549,1.00000",
+          "srgb:0.00784,0.23529,0.26667,1.00000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 1
+          }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "srgb:0.01961,0.20392,0.22745,1.00000",
+          "srgb:0.00392,0.09412,0.10588,1.00000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 1
+          }
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": true,
+          "name": "Cherry",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          },
+          "image-name": "Cherry.svg"
+        }
+      ]
+    },
+    {
+      "layers": [
+        {
+          "glass": true,
+          "name": "Icing",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          },
+          "image-name": "Icing.svg"
+        }
+      ]
+    },
+    {
+      "layers": [
+        {
+          "glass": true,
+          "name": "Mug",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          },
+          "image-name": "Mug.svg"
+        }
+      ]
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "name": "Stars",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          },
+          "image-name": "Stars.svg"
+        }
+      ]
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}
