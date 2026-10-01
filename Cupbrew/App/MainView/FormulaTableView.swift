@@ -8,6 +8,16 @@ struct FormulaTableView: View {
 
     var body: some View {
         table
+            .overlay {
+                if let failure = browser.rowsFailure {
+                    ContentUnavailableView {
+                        Label("Couldn’t Load This List", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(failure)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
             .focused($isFocused)
             .onChange(of: isFocused) { browser.isTableFocused = isFocused }
             .contextMenu(forSelectionType: String.self) { names in

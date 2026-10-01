@@ -13,6 +13,18 @@ enum SidebarItem: Hashable, CaseIterable {
     static let formulae: [SidebarItem] = [.installed, .outdated, .all, .leaves, .repositories]
     static let tools: [SidebarItem] = [.doctor, .update]
 
+    /// The Homebrew list the rows come from; tools have none.
+    var list: Homebrew.List? {
+        switch self {
+        case .installed: .installed
+        case .outdated: .outdated
+        case .all: .all
+        case .leaves: .leaves
+        case .repositories: .repositories
+        case .doctor, .update: nil
+        }
+    }
+
     var title: LocalizedStringResource {
         switch self {
         case .installed: "Installed"

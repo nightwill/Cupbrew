@@ -34,9 +34,7 @@ final class BundleJob: Identifiable {
         }
         let status = await run.start(arguments, with: brew)
         if status != 0 {
-            let lines = run.output.split(whereSeparator: \.isNewline)
-            let complaint = lines.first { $0.hasPrefix("Error:") || $0.hasPrefix("fatal:") } ?? lines.last
-            error = complaint.map(String.init) ?? String(localized: "Homebrew exited with status \(status).")
+            error = Brew.failure(in: run.output, status: status)
         }
         isFinished = true
     }

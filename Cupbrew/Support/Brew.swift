@@ -7,6 +7,21 @@ import Foundation
 /// Homebrew intact instead of being split by a shell on the way.
 struct Brew: Sendable {
 
+    /// What a command printed to standard output, and how it ended.
+    struct Output: Sendable {
+        let text: String
+        let status: Int32
+        /// Standard error, kept apart so that `text` stays clean JSON.
+        let errors: String
+
+        var succeeded: Bool { status == 0 }
+
+        /// Why the command failed, in Homebrew's words where it gave any.
+        var failure: String {
+            Brew.failure(in: errors, status: status)
+        }
+    }
+
     let executable: URL
 
     /// Finds Homebrew where it installs itself, and failing that asks the
@@ -39,23 +54,32 @@ struct Brew: Sendable {
                     // resumes on it too, so every piece arrives before the
                     // caller learns the command is over.
                     DispatchQueue.main.async { MainActor.assumeIsolated { receive(text) } }
-                }
+                }.status
                 DispatchQueue.main.async { continuation.resume(returning: status) }
             }
         }
     }
 
-    /// Runs `brew` with `arguments` to the end and returns what it printed to
-    /// standard output. Standard error is dropped: Homebrew reports progress
-    /// there, and it would break the JSON a caller is about to decode.
-    func output(_ arguments: [String]) async -> String {
+    /// Runs `brew` with `arguments` to the end and returns what it printed.
+    /// Standard error comes back apart: Homebrew reports progress there, and
+    /// it would break the JSON a caller is about to decode.
+    func output(_ arguments: [String]) async -> Output {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                var output = ""
-                _ = Self.runBlocking(executable, arguments, includingErrors: false) { output += $0 }
-                continuation.resume(returning: output)
+                var text = ""
+                let (status, errors) = Self.runBlocking(executable, arguments, includingErrors: false) { text += $0 }
+                continuation.resume(returning: Output(text: text, status: status, errors: errors))
             }
         }
+    }
+
+    /// Why a command that ended with `status` failed: the line of `text`
+    /// where Homebrew says what went wrong, or the last thing it printed when
+    /// no line says so.
+    static func failure(in text: String, status: Int32) -> String {
+        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+        let complaint = lines.first { $0.hasPrefix("Error:") || $0.hasPrefix("fatal:") } ?? lines.last { !$0.isEmpty }
+        return complaint ?? String(localized: "Homebrew exited with status \(status).")
     }
 
     /// Stops every command still running, so none outlives the app.
@@ -70,7 +94,7 @@ struct Brew: Sendable {
         _ arguments: [String],
         includingErrors: Bool,
         receive: (String) -> Void
-    ) -> Int32 {
+    ) -> (status: Int32, errors: String) {
         let process = Process()
         // One pipe for both streams: two would have to be drained at once, or
         // the unread one fills up and stops the command halfway.
@@ -83,16 +107,28 @@ struct Brew: Sendable {
         // answer nobody is going to type.
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = pipe
-        process.standardError = includingErrors ? pipe : FileHandle.nullDevice
+        // Kept apart, standard error has to be drained on a thread of its own
+        // for the same reason.
+        let errorPipe = includingErrors ? nil : Pipe()
+        process.standardError = errorPipe ?? pipe
 
         do {
             try process.run()
         } catch {
             receive(error.localizedDescription + "\n")
-            return -1
+            return (-1, error.localizedDescription)
         }
         running.withLock { _ = $0.insert(process) }
         defer { running.withLock { _ = $0.remove(process) } }
+
+        let errors = Locked(Data())
+        let errorsRead = DispatchGroup()
+        if let errorPipe {
+            DispatchQueue.global(qos: .userInitiated).async(group: errorsRead) {
+                let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                errors.withLock { $0 = data }
+            }
+        }
 
         var decoder = TextDecoder()
         let handle = pipe.fileHandleForReading
@@ -100,8 +136,9 @@ struct Brew: Sendable {
             if let text = decoder.decode(data) { receive(text) }
         }
         if let text = decoder.flush() { receive(text) }
+        errorsRead.wait()
         process.waitUntilExit()
-        return process.terminationStatus
+        return (process.terminationStatus, errors.withLock { TextDecoder.string($0) })
     }
 
     /// An app opened from Finder inherits launchd's bare `PATH`, where the
@@ -123,7 +160,7 @@ struct Brew: Sendable {
         // A profile may print a greeting, so the answer is fenced between two
         // control characters nothing else prints and cut out of the noise.
         // swiftlint:disable:next non_localized_string
-        let output = await brew.output(["-l", "-c", "printf '\\1%s\\2' \"$(command -v brew)\""])
+        let output = await brew.output(["-l", "-c", "printf '\\1%s\\2' \"$(command -v brew)\""]).text
         guard let opening = output.firstIndex(of: "\u{01}"),
               let closing = output[opening...].firstIndex(of: "\u{02}") else { return nil }
         let path = String(output[output.index(after: opening)..<closing])
@@ -148,7 +185,7 @@ private struct TextDecoder {
 
     /// Latin-1 decodes any bytes at all, so output that is not UTF-8 still
     /// shows up rather than vanishing.
-    private static func string(_ data: Data) -> String {
+    static func string(_ data: Data) -> String {
         String(bytes: data, encoding: .utf8) ?? String(bytes: data, encoding: .isoLatin1) ?? ""
     }
 

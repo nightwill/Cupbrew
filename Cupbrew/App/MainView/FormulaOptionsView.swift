@@ -65,7 +65,7 @@ struct FormulaOptionsView: View {
         .frame(minWidth: 480, minHeight: 315)
         .task {
             guard let brew = browser.homebrew.brew else { return }
-            let json = await brew.output(["info", "--json=v2", "--formula", name])
+            let json = await brew.output(["info", "--json=v2", "--formula", name]).text
             options = FormulaInfo(json: json)?.options ?? []
         }
     }

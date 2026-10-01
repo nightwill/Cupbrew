@@ -11,6 +11,15 @@ final class Homebrew {
         case ready
     }
 
+    /// The lists read from Homebrew, one command each.
+    enum List {
+        case installed
+        case outdated
+        case all
+        case leaves
+        case repositories
+    }
+
     private(set) var state = State.loading
     private(set) var brew: Brew?
     private(set) var cellar: String?
@@ -20,6 +29,9 @@ final class Homebrew {
     private(set) var all: [Formula] = []
     private(set) var leaves: [Formula] = []
     private(set) var repositories: [Formula] = []
+
+    /// Why a list is empty when Homebrew failed to give it, by list.
+    private(set) var failures: [List: String] = [:]
 
     private(set) var isReloading = false
 
@@ -33,7 +45,7 @@ final class Homebrew {
             return
         }
         self.brew = brew
-        cellar = await brew.output(["--cellar"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        cellar = await brew.output(["--cellar"]).text.trimmingCharacters(in: .whitespacesAndNewlines)
         await reload()
     }
 
@@ -50,16 +62,32 @@ final class Homebrew {
         async let leavesOutput = brew.output(["leaves"])
         async let tapOutput = brew.output(["tap"])
 
-        installed = await Self.lines(of: installedOutput).map { line in
+        var failures: [List: String] = [:]
+        // A list whose command failed comes back empty, with the reason.
+        func text(_ output: Brew.Output, of list: List) -> String {
+            if !output.succeeded { failures[list] = output.failure }
+            return output.succeeded ? output.text : ""
+        }
+
+        installed = Self.lines(of: text(await installedOutput, of: .installed)).map { line in
             // `name 1.0 1.1`: several versions are installed side by side,
             // the last is the newest.
             let words = line.split(separator: " ").map(String.init)
             return Formula(name: words[0], version: words.count > 1 ? words.last : nil)
         }
-        outdated = Self.outdated(from: await outdatedOutput)
-        all = await Self.lines(of: allOutput).map { Formula(name: $0) }
-        leaves = await Self.lines(of: leavesOutput).map { Formula(name: $0) }
-        repositories = await Self.lines(of: tapOutput).map { Formula(name: $0) }
+        if let decoded = Self.outdated(from: text(await outdatedOutput, of: .outdated)) {
+            outdated = decoded
+        } else {
+            outdated = []
+            // A failed command is empty, which does not decode either.
+            if failures[.outdated] == nil {
+                failures[.outdated] = String(localized: "Homebrew’s reply couldn’t be read.")
+            }
+        }
+        all = Self.lines(of: text(await allOutput, of: .all)).map { Formula(name: $0) }
+        leaves = Self.lines(of: text(await leavesOutput, of: .leaves)).map { Formula(name: $0) }
+        repositories = Self.lines(of: text(await tapOutput, of: .repositories)).map { Formula(name: $0) }
+        self.failures = failures
 
         installedNames = Set(installed.map(\.name))
         outdatedNames = Set(outdated.map(\.name))
@@ -78,10 +106,11 @@ final class Homebrew {
             .filter { !$0.isEmpty }
     }
 
-    private static func outdated(from json: String) -> [Formula] {
+    /// `nil` when the JSON could not be decoded.
+    private static func outdated(from json: String) -> [Formula]? {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let answer = try? decoder.decode(Outdated.self, from: Data(json.utf8)) else { return [] }
+        guard let answer = try? decoder.decode(Outdated.self, from: Data(json.utf8)) else { return nil }
         return answer.formulae.map {
             Formula(name: $0.name, version: $0.installedVersions.last, latestVersion: $0.currentVersion)
         }

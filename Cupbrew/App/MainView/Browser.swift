@@ -100,6 +100,12 @@ final class Browser {
         }
     }
 
+    /// Why the rows are missing, when Homebrew failed to list them.
+    var rowsFailure: String? {
+        let list = isSearching ? .all : sidebar.list
+        return list.flatMap { homebrew.failures[$0] }
+    }
+
     var footer: String {
         isSearching ? String(localized: "These are the results of your search.") : String(localized: sidebar.footer)
     }
@@ -376,7 +382,7 @@ extension Browser {
             // Arrowing through the list should not start a command per row.
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            let json = await brew.output(["info", "--json=v2", "--formula", name])
+            let json = await brew.output(["info", "--json=v2", "--formula", name]).text
             guard !Task.isCancelled else { return }
             info = FormulaInfo(json: json)
         }
