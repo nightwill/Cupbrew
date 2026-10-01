@@ -12,7 +12,9 @@ struct SelectedFormulaView: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 3) {
                 row("Description:", description)
                 row("Location:", location)
-                row("Version:", browser.info?.versions.stable)
+                // `row` takes a LocalizedStringResource; the rule only sees the space.
+                // swiftlint:disable:next non_localized_string
+                row("Latest Version:", browser.info?.versions.stable)
                 row("Dependencies:", dependencies)
                 row("Conflicts:", conflicts)
             }
